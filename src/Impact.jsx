@@ -11,7 +11,7 @@ import {
   ArrowUpRight,
 } from 'lucide-react';
 import { api, money } from './api';
-import { Badge, Stat, Empty, Status } from './components';
+import { Badge, Stat, Empty, Status, EcoRewardsCard, MilestoneBadges, RewardsCatalog } from './components';
 export function Savings({ data, user, open }) {
   const submit = () =>
     open({
@@ -204,6 +204,9 @@ export function Impact({ data, user, open }) {
           </a>
         </section>
       </div>
+      <EcoRewardsCard rewards={m.rewards} />
+      <MilestoneBadges badges={m.rewards?.badges} />
+      <RewardsCatalog rewards={m.rewards?.availableRewards} />
       {['kitchen', 'processor', 'admin', 'auditor'].includes(user.role) && (
         <Savings data={data} user={user} open={open} />
       )}

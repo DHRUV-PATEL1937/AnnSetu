@@ -102,3 +102,119 @@ export function readingAlerts(r) {
     r.outputKg > 0 && r.energy / r.outputKg > 1.5 ? 'Energy intensity above 1.5 kWh/kg' : null,
   ].filter(Boolean);
 }
+
+export function calculateRewards({ rescuedKg = 0, estimatedCo2Kg = 0, preventedKg = 0 }) {
+  const rescuePoints = Math.round(rescuedKg * 10);
+  const carbonPoints = Math.round(estimatedCo2Kg * 25);
+  const preventionPoints = Math.round(preventedKg * 15);
+  const totalPoints = rescuePoints + carbonPoints + preventionPoints;
+
+  let tier = 'Seedling Pioneer';
+  let tierIcon = '🌱';
+  let nextTier = 'Eco Guardian';
+  let nextThreshold = 500;
+  let prevThreshold = 0;
+
+  if (totalPoints >= 5000) {
+    tier = 'Planet Custodian';
+    tierIcon = '🌍';
+    nextTier = 'Supreme Eco Leader';
+    nextThreshold = 10000;
+    prevThreshold = 5000;
+  } else if (totalPoints >= 2000) {
+    tier = 'Zero-Waste Champion';
+    tierIcon = '🌳';
+    nextTier = 'Planet Custodian';
+    nextThreshold = 5000;
+    prevThreshold = 2000;
+  } else if (totalPoints >= 500) {
+    tier = 'Eco Guardian';
+    tierIcon = '🌿';
+    nextTier = 'Zero-Waste Champion';
+    nextThreshold = 2000;
+    prevThreshold = 500;
+  }
+
+  const progress = Math.min(
+    100,
+    Math.round(((totalPoints - prevThreshold) / Math.max(1, nextThreshold - prevThreshold)) * 100),
+  );
+
+  const badges = [
+    {
+      id: 'first_recovery',
+      name: 'Pioneer Recovery',
+      description: 'First successful food rescue verified',
+      unlocked: rescuedKg > 0 || preventedKg > 0,
+    },
+    {
+      id: 'century_saver',
+      name: 'Century Saver',
+      description: 'Over 100 kg of food recovered or prevented',
+      unlocked: rescuedKg + preventedKg >= 100,
+    },
+    {
+      id: 'carbon_hero',
+      name: 'Carbon Buster',
+      description: 'Over 250 kg CO₂e greenhouse gases avoided',
+      unlocked: estimatedCo2Kg >= 250,
+    },
+    {
+      id: 'champion',
+      name: 'Zero-Waste Master',
+      description: 'Achieved 2,000+ EcoPoints milestone',
+      unlocked: totalPoints >= 2000,
+    },
+  ];
+
+  const availableRewards = [
+    {
+      id: 'transport_voucher',
+      title: 'Green Logistics Transport Subsidy',
+      pointsCost: 500,
+      category: 'Logistics',
+      description: 'Sponsor-backed subsidy for next 5 local redistribution dispatches.',
+      status: totalPoints >= 500 ? 'eligible' : 'locked',
+    },
+    {
+      id: 'esg_certificate',
+      title: 'Verified Sustainability ESG Certificate',
+      pointsCost: 1000,
+      category: 'Governance',
+      description: 'Official digital ESG attestation of carbon footprint & waste prevention.',
+      status: totalPoints >= 1000 ? 'eligible' : 'locked',
+    },
+    {
+      id: 'priority_matching',
+      title: 'Priority Partner Redistribution Rank',
+      pointsCost: 1500,
+      category: 'Redistribution',
+      description: 'Top placement in regional matching algorithm for 30 calendar days.',
+      status: totalPoints >= 1500 ? 'eligible' : 'locked',
+    },
+    {
+      id: 'compost_packaging_kit',
+      title: 'Organic Food Compost & Packaging Kit',
+      pointsCost: 2000,
+      category: 'Materials',
+      description: '100% biodegradable food-grade packaging rolls and composting bins.',
+      status: totalPoints >= 2000 ? 'eligible' : 'locked',
+    },
+  ];
+
+  return {
+    totalPoints,
+    rescuePoints,
+    carbonPoints,
+    preventionPoints,
+    tier,
+    tierIcon,
+    nextTier,
+    nextThreshold,
+    pointsNeeded: Math.max(0, nextThreshold - totalPoints),
+    progress,
+    badges,
+    availableRewards,
+  };
+}
+

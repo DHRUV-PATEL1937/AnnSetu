@@ -29,10 +29,13 @@ import {
   HandCoins,
   CheckCheck,
   X,
+  Compass,
 } from 'lucide-react';
 import { api, roles } from './api';
-import { Brand, Badge, Modal, SearchBox, BatchTable, BatchCards } from './components';
+import { Brand, Badge, Modal, SearchBox, BatchTable, BatchCards, NotificationPopover } from './components';
 import Login from './Login';
+import Register from './Register';
+import Landing from './Landing';
 import Overview from './Overview';
 import Matching from './Matching';
 import { Demand, Sensors, NeedsList, Route } from './Operations';
@@ -104,7 +107,30 @@ export default function App() {
     [busy, setBusy] = useState(false),
     [mobile, setMobile] = useState(false),
     [aiOpen, setAiOpen] = useState(false),
-    [refreshing, setRefreshing] = useState(false);
+    [notifOpen, setNotifOpen] = useState(false),
+    [refreshing, setRefreshing] = useState(false),
+    [authView, setAuthView] = useState('landing'),
+    [viewingAbout, setViewingAbout] = useState(false),
+    [demoEmail, setDemoEmail] = useState(''),
+    [demoPassword, setDemoPassword] = useState('');
+  const handleQuickLogin = async (email, password) => {
+    setBusy(true);
+    try {
+      const u = await api('/auth/login', { method: 'POST', body: { email, password } });
+      setUser(u);
+      setPage('Overview');
+      setData(null);
+      setViewingAbout(false);
+      setToast(`Welcome back, ${u.name}!`);
+    } catch (err) {
+      setToast(err.message);
+      setDemoEmail(email);
+      setDemoPassword(password);
+      setAuthView('login');
+    } finally {
+      setBusy(false);
+    }
+  };
   const refresh = useCallback(async () => {
     try {
       const result = await api('/workspace');
@@ -181,14 +207,50 @@ export default function App() {
         <LoaderCircle className="spin" />
       </div>
     );
-  if (!user)
+  if (!user) {
+    if (authView === 'landing')
+      return (
+        <Landing
+          onGoToLogin={() => setAuthView('login')}
+          onGoToRegister={() => setAuthView('register')}
+          onQuickLogin={handleQuickLogin}
+        />
+      );
+    if (authView === 'register')
+      return (
+        <Register
+          onRegister={(u) => {
+            setUser(u);
+            setPage('Overview');
+            setData(null);
+            setToast(`Welcome to AnnSetu, ${u.name}!`);
+          }}
+          onGoToLogin={() => setAuthView('login')}
+          onGoToLanding={() => setAuthView('landing')}
+        />
+      );
     return (
       <Login
+        initialEmail={demoEmail}
+        initialPassword={demoPassword}
         onLogin={(u) => {
           setUser(u);
           setPage('Overview');
           setData(null);
         }}
+        onGoToRegister={() => setAuthView('register')}
+        onGoToLanding={() => setAuthView('landing')}
+      />
+    );
+  }
+  if (viewingAbout)
+    return (
+      <Landing
+        user={user}
+        onBackToWorkspace={() => setViewingAbout(false)}
+        onGoToLogin={() => {}}
+        onGoToRegister={() => {}}
+        onQuickLogin={handleQuickLogin}
       />
     );
   const nav = roleNav[user.role],
@@ -402,6 +464,12 @@ export default function App() {
             </button>
           </div>
           <button
+            className="settings"
+            onClick={() => setViewingAbout(true)}
+          >
+            <Compass size={17} /> About & Process
+          </button>
+          <button
             className={`settings ${page === 'Settings' ? 'selected' : ''}`}
             onClick={() => navigate('Settings')}
           >
@@ -438,6 +506,44 @@ export default function App() {
             <strong>{page}</strong>
           </div>
           <div className="topbar-right">
+            <button
+              className="topbar-btn-pill"
+              title="Learn how AnnSetu works and explore the 6-stage food recovery lifecycle"
+              onClick={() => setViewingAbout(true)}
+            >
+              <Compass size={14} />
+              <span>About Process</span>
+            </button>
+            <div className="role-switcher-wrap" title="Switch demo role instantly">
+              <span className="switcher-lbl">Role:</span>
+              <select
+                className="role-switcher-select"
+                value={user.role}
+                aria-label="Switch active demo role"
+                onChange={async (e) => {
+                  const targetRole = e.target.value;
+                  if (targetRole === user.role) return;
+                  try {
+                    const u = await api('/auth/login', {
+                      method: 'POST',
+                      body: { email: `${targetRole}@annsetu.demo`, password: 'AnnSetu@2026' },
+                    });
+                    setUser(u);
+                    setData(null);
+                    setPage('Overview');
+                    setToast(`Switched workspace to ${roles[targetRole]}`);
+                  } catch (err) {
+                    setToast(err.message);
+                  }
+                }}
+              >
+                {Object.entries(roles).map(([r, label]) => (
+                  <option key={r} value={r}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
             <span className="connection">
               <i className={error ? 'disconnected' : ''} />
               {error ? 'Connection interrupted' : data ? 'MongoDB connected' : 'Connecting…'}
@@ -454,15 +560,30 @@ export default function App() {
             >
               <RefreshCw size={17} className={refreshing ? 'spin' : ''} />
             </button>
-            <button
-              className="icon-button notification"
-              title="View activity and alerts"
-              aria-label="View activity and alerts"
-              onClick={() => navigate('Activity')}
-            >
-              <Bell size={18} />
-              {data?.metrics.alerts > 0 && <i />}
-            </button>
+            <div className="notification-wrapper">
+              <button
+                className={`icon-button notification ${notifOpen ? 'active' : ''}`}
+                title="View operational alerts and notifications"
+                aria-label="View operational alerts and notifications"
+                onClick={() => setNotifOpen(!notifOpen)}
+              >
+                <Bell size={18} />
+                {(data?.metrics?.alerts > 0 ||
+                  data?.batches?.some((b) => b.status === 'review') ||
+                  data?.batches?.some((b) => {
+                    const h = (new Date(b.expiresAt).getTime() - Date.now()) / 3600000;
+                    return h > 0 && h <= 4 && !['confirmed', 'delivered', 'rejected'].includes(b.status);
+                  })) && <i className="pulse" />}
+              </button>
+              <NotificationPopover
+                open={notifOpen}
+                onClose={() => setNotifOpen(false)}
+                data={data}
+                user={user}
+                navigate={navigate}
+                reviewBatch={reviewBatch}
+              />
+            </div>
             <span className="topbar-divider" />
             <span className="avatar small-avatar">
               {user.name

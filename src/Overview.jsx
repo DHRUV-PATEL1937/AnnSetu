@@ -8,8 +8,11 @@ import {
   Sparkles,
   ArrowRight,
   ShoppingBasket,
+  Award,
+  AlertTriangle,
+  CheckCircle2,
 } from 'lucide-react';
-import { money, number } from './api';
+import { money, number, roles } from './api';
 import { Badge, Stat, Chart, Status, Empty } from './components';
 const headings = {
   kitchen: [
@@ -52,6 +55,7 @@ const headings = {
 export default function Overview({ data, user, navigate, setAiOpen, reviewBatch }) {
   const h = headings[user.role],
     m = data.metrics,
+    rewards = m.rewards,
     producer = ['kitchen', 'processor'].includes(user.role),
     next = producer
       ? 'Demand planning'
@@ -65,77 +69,70 @@ export default function Overview({ data, user, navigate, setAiOpen, reviewBatch 
         }[user.role];
   return (
     <>
-      <section className="hero">
-        <div className="hero-copy">
-          <div className="hero-kicker">
-            <span className="live-dot" /> PREVENT. CONNECT. REGENERATE.
+      <section className="dashboard-welcome">
+        <div className="welcome-main">
+          <div className="welcome-meta-row">
+            <span className="welcome-role-badge">{roles[user.role]}</span>
+            <span className="live-dot" />
+            <span className="welcome-org">{user.org}</span>
           </div>
-          <h2>
-            {h[0]}
-            <br />
-            <em>{h[1]}</em>
+          <h2 className="welcome-title">
+            Hello, {user.name.split(' ')[0]} 👋
           </h2>
-          <p>{h[2]}</p>
-          <button onClick={() => navigate(next)}>
-            {producer ? 'Plan tomorrow’s production' : 'Explore your next action'}
-            <ArrowUpRight size={17} />
+          <p className="welcome-subhead">{h[2]}</p>
+        </div>
+
+        <div className="welcome-actions">
+          {rewards && (
+            <div
+              className="welcome-reward-pill"
+              onClick={() => navigate(producer ? 'Savings & impact' : 'Impact reports')}
+              title="Click to view EcoPoints & Reward Tier breakdown"
+            >
+              <span className="reward-icon">{rewards.tierIcon}</span>
+              <div>
+                <strong>{rewards.tier}</strong>
+                <small>{number(rewards.totalPoints)} Green Points</small>
+              </div>
+              <ArrowRight size={15} />
+            </div>
+          )}
+          <button className="button" onClick={() => navigate(next)}>
+            {producer ? 'Plan tomorrow’s production' : 'Explore recovery network'}
+            <ArrowUpRight size={16} />
           </button>
         </div>
-        <div className="hero-visual">
-          <div className="hero-orbit orbit-a" />
-          <div className="hero-orbit orbit-b" />
-          <div className="hero-leaf">
-            <Leaf size={86} strokeWidth={1.05} />
-          </div>
-          <div className="hero-float top-float">
-            <span>
-              <TrendingUp size={16} />
-            </span>
-            <div>
-              Prevention first<strong>Value beyond waste</strong>
-            </div>
-          </div>
-          <div className="hero-float bottom-float">
-            <span>
-              <HeartHandshake size={19} />
-            </span>
-            <div>
-              Better, together<strong>Food connects us.</strong>
-            </div>
-          </div>
-          <span className="hero-dot dot-a" />
-          <span className="hero-dot dot-b" />
-        </div>
       </section>
+
       <div className="stats-grid">
         <Stat
           label={producer ? 'Verified savings' : 'Food recovered'}
           value={producer ? money(m.savings) : `${number(m.rescuedKg)} kg`}
           detail={
-            producer ? 'Volume-normalized · verified demo claims' : 'Recipient-confirmed recoveries'
+            producer ? 'Volume-normalized · verified claims' : 'Recipient-confirmed recoveries'
           }
           Icon={producer ? Wallet : Leaf}
         />
         <Stat
           label="Meals made possible"
           value={number(m.mealEquivalents)}
-          detail="Meal equivalents · 0.4 kg per meal"
+          detail="0.4 kg standard meal equivalent"
           Icon={HeartHandshake}
           tone="peach"
         />
         <Stat
-          label="Food kept in circulation"
-          value={`${number(m.rescuedKg)} kg`}
-          detail="Completed & confirmed handovers"
-          Icon={Package}
-          tone="lavender"
-        />
-        <Stat
           label="Estimated CO₂e avoided"
           value={`${number(m.estimatedCo2Kg)} kg`}
-          detail="Illustrative estimate · factor 2.5"
+          detail="Factor 2.5 kg CO₂e / kg saved"
           Icon={Leaf}
           tone="lime"
+        />
+        <Stat
+          label="AnnSetu EcoPoints"
+          value={`${number(rewards?.totalPoints || 0)} pts`}
+          detail={`${rewards?.tierIcon || '🌱'} ${rewards?.tier || 'Eco Guardian'} · Badges & Perks`}
+          Icon={Award}
+          tone="lavender"
         />
       </div>
       <div className="overview-middle">
@@ -313,26 +310,30 @@ export default function Overview({ data, user, navigate, setAiOpen, reviewBatch 
         <section className="community-card">
           <div className="row spread">
             <span className="community-icon">
-              <HeartHandshake size={23} />
+              <HeartHandshake size={24} />
             </span>
-            <Badge tone="outline-dark">THE BIGGER PICTURE</Badge>
+            <Badge tone="green">CONNECTED LOOP</Badge>
           </div>
           <h2>
             Surplus for one.
-            <br />A fresh start for another.
+            <br />Nourishment for another.
           </h2>
-          <p>A connected network of kitchens, communities and people who care.</p>
+          <p>
+            Connected kitchens, certified processors, NGOs and transport partners working in harmony.
+          </p>
           <div className="community-foot">
-            <div className="avatar-stack">
-              <span>AK</span>
-              <span>FF</span>
-              <span>GM</span>
-            </div>
             <div>
-              <strong>{data.network.length} partners</strong>
-              <small>One shared purpose</small>
+              <strong>{data.network.length} active partners</strong>
+              <small>Bengaluru Regional Ecosystem</small>
             </div>
-            <ArrowUpRight size={23} />
+            <button
+              className="icon-button"
+              onClick={() => navigate('Network directory')}
+              aria-label="View network directory"
+              title="View network directory"
+            >
+              <ArrowUpRight size={20} />
+            </button>
           </div>
         </section>
       </div>

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { forecast, savingsValue, distance, routePlan, readingAlerts } from '../server/domain.js';
+import { forecast, savingsValue, distance, routePlan, readingAlerts, calculateRewards } from '../server/domain.js';
 test('forecast handles cold start without fabricating predictions', () =>
   assert.equal(forecast([]).ready, false));
 test('forecast backtest and attendance scenario are reproducible', () => {
@@ -77,3 +77,18 @@ test('sensor thresholds catch operational loss and cold-chain excursion', () => 
     0,
   );
 });
+
+test('calculateRewards scores food, carbon and prevention into tiers and badges', () => {
+  const r1 = calculateRewards({ rescuedKg: 0, estimatedCo2Kg: 0, preventedKg: 0 });
+  assert.equal(r1.totalPoints, 0);
+  assert.equal(r1.tier, 'Seedling Pioneer');
+
+  const r2 = calculateRewards({ rescuedKg: 50, estimatedCo2Kg: 125, preventedKg: 20 });
+  // 50*10 + 125*25 + 20*15 = 500 + 3125 + 300 = 3925
+  assert.equal(r2.totalPoints, 3925);
+  assert.equal(r2.tier, 'Zero-Waste Champion');
+  assert.equal(r2.badges.find((b) => b.id === 'century_saver').unlocked, false);
+  assert.equal(r2.badges.find((b) => b.id === 'first_recovery').unlocked, true);
+  assert.equal(r2.badges.find((b) => b.id === 'champion').unlocked, true);
+});
+

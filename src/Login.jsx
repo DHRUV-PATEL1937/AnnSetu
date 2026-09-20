@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { Leaf, Building2, HeartHandshake, Truck, ArrowRight, LockKeyhole } from 'lucide-react';
 import { api, roles } from './api';
 import { Brand, Badge, Field, icons } from './components';
-export default function Login({ onLogin }) {
+export default function Login({ onLogin, onGoToRegister, onGoToLanding, initialEmail, initialPassword }) {
   const [role, setRole] = useState('kitchen'),
-    [email, setEmail] = useState('kitchen@annsetu.demo'),
-    [password, setPassword] = useState('AnnSetu@2026'),
+    [email, setEmail] = useState(initialEmail || 'kitchen@annsetu.demo'),
+    [password, setPassword] = useState(initialPassword || 'AnnSetu@2026'),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false);
   return (
@@ -47,13 +47,22 @@ export default function Login({ onLogin }) {
           </div>
         </div>
         <footer>
-          From surplus to shared value.<span>Made for India ↗</span>
+          {onGoToLanding && (
+            <button type="button" className="text-link" onClick={onGoToLanding}>
+              ← About AnnSetu & Process
+            </button>
+          )}
+          <span>From surplus to shared value.</span>
         </footer>
       </section>
       <section className="login-form">
         <div className="login-top">
           <Badge tone="green">LOCAL PILOT</Badge>
-          <span>MERN + Sarvam AI</span>
+          {onGoToLanding && (
+            <button type="button" className="btn-ghost-sm" onClick={onGoToLanding}>
+              View Process Overview
+            </button>
+          )}
         </div>
         <div className="login-box">
           <p className="eyebrow">WELCOME TO ANNSETU</p>
@@ -62,7 +71,14 @@ export default function Login({ onLogin }) {
             <br />
             starts here.
           </h2>
-          <p className="muted">Sign in to your food sustainability workspace.</p>
+          <p className="muted">
+            Sign in to your food sustainability workspace, or{' '}
+            {onGoToRegister && (
+              <button type="button" className="inline-action-btn" onClick={onGoToRegister}>
+                register organization
+              </button>
+            )}
+          </p>
           <form
             onSubmit={async (e) => {
               e.preventDefault();

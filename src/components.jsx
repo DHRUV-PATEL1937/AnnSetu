@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Leaf,
   Package,
@@ -18,6 +18,12 @@ import {
   ShieldCheck,
   Users,
   Search,
+  Bell,
+  Award,
+  Sparkles,
+  AlertTriangle,
+  CheckCircle2,
+  Zap,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -435,3 +441,372 @@ export function BatchTable({ batches, action, actionLabel, actionFilter = () => 
     </section>
   );
 }
+
+export function NotificationPopover({ open, onClose, data, user, navigate, reviewBatch }) {
+  const popoverRef = useRef(null);
+  const [tab, setTab] = useState('All');
+
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    const handleClickOutside = (e) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target)) {
+        // avoid closing if clicked on notification bell toggle
+        if (!e.target.closest('.notification')) onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  // Build notifications
+  const notifications = [];
+
+  // Reading alerts (high priority)
+  const sensorAlerts = data?.readings?.[0]?.alerts || [];
+  sensorAlerts.forEach((a, i) => {
+    notifications.push({
+      id: `alert-${i}`,
+      type: 'alert',
+      priority: 'high',
+      title: 'Sensor & Storage Excursion',
+      message: a,
+      time: 'Live sensor reading',
+      actionLabel: 'Check sensors',
+      onAction: () => {
+        onClose();
+        navigate(user.role === 'processor' ? 'Processing & sensors' : 'Storage & sensors');
+      },
+    });
+  });
+
+  // Batches needing review (for producers)
+  const reviewBatches = data?.batches?.filter((b) => b.status === 'review') || [];
+  reviewBatches.slice(0, 3).forEach((b) => {
+    notifications.push({
+      id: `review-${b._id}`,
+      type: 'alert',
+      priority: 'medium',
+      title: 'Quality Review Required',
+      message: `Batch "${b.name}" (${b.quantity} kg) is awaiting human safety sign-off before release.`,
+      time: 'Pending hold',
+      actionLabel: 'Review batch',
+      onAction: () => {
+        onClose();
+        reviewBatch(b);
+      },
+    });
+  });
+
+  // Food expiring soon (< 4 hours)
+  const now = Date.now();
+  const expiringBatches =
+    data?.batches?.filter((b) => {
+      if (['confirmed', 'delivered', 'rejected'].includes(b.status)) return false;
+      const hoursLeft = (new Date(b.expiresAt).getTime() - now) / 3600000;
+      return hoursLeft > 0 && hoursLeft <= 4;
+    }) || [];
+
+  expiringBatches.slice(0, 3).forEach((b) => {
+    const hours = Math.max(1, Math.ceil((new Date(b.expiresAt).getTime() - now) / 3600000));
+    notifications.push({
+      id: `expire-${b._id}`,
+      type: 'alert',
+      priority: 'high',
+      title: 'Surplus Nearing Expiry',
+      message: `"${b.name}" (${b.quantity} kg) expires in ${hours} hour${hours > 1 ? 's' : ''}! Expedite handover.`,
+      time: `${hours}h left`,
+      actionLabel: 'View surplus',
+      onAction: () => {
+        onClose();
+        navigate(
+          ['kitchen', 'processor'].includes(user.role)
+            ? 'Inventory'
+            : user.role === 'logistics'
+              ? 'Available jobs'
+              : 'Surplus exchange',
+        );
+      },
+    });
+  });
+
+  // Deliveries pending confirmation (for recipient NGO/Buyer)
+  const pendingConfirmation =
+    data?.batches?.filter(
+      (b) =>
+        b.status === 'delivered' &&
+        (['ngo', 'buyer'].includes(user.role) || String(b.claimant?._id) === String(user.id)),
+    ) || [];
+
+  pendingConfirmation.slice(0, 2).forEach((b) => {
+    notifications.push({
+      id: `confirm-${b._id}`,
+      type: 'update',
+      priority: 'medium',
+      title: 'Delivery Handover Arrived',
+      message: `"${b.name}" was marked delivered by driver. Confirm receipt to complete impact tracking.`,
+      time: 'Awaiting confirmation',
+      actionLabel: 'Confirm receipt',
+      onAction: () => {
+        onClose();
+        navigate(user.role === 'buyer' ? 'My orders' : 'My recoveries');
+      },
+    });
+  });
+
+  // Eco-Rewards milestone notification
+  const rewards = data?.metrics?.rewards;
+  if (rewards && rewards.totalPoints > 0) {
+    notifications.push({
+      id: 'eco-reward-summary',
+      type: 'reward',
+      priority: 'info',
+      title: `${rewards.tierIcon} ${rewards.tier} Status`,
+      message: `You have earned ${number(rewards.totalPoints)} AnnSetu EcoPoints from verified carbon and food savings!`,
+      time: `${rewards.pointsNeeded > 0 ? `${rewards.pointsNeeded} pts to ${rewards.nextTier}` : 'Top tier achieved'}`,
+      actionLabel: 'View rewards',
+      onAction: () => {
+        onClose();
+        navigate(
+          ['kitchen', 'processor'].includes(user.role) ? 'Savings & impact' : 'Impact reports',
+        );
+      },
+    });
+  }
+
+  // Filter based on selected tab
+  const filteredNotifs = notifications.filter((n) => {
+    if (tab === 'Alerts') return n.type === 'alert';
+    if (tab === 'Rewards') return n.type === 'reward';
+    return true;
+  });
+
+  const alertCount = notifications.filter((n) => n.priority === 'high').length;
+
+  return (
+    <div className="notif-popover" ref={popoverRef} role="dialog" aria-label="Notifications popover">
+      <div className="notif-header">
+        <div className="row">
+          <Bell size={18} />
+          <strong>Notifications</strong>
+          <Badge tone={alertCount > 0 ? 'red' : 'green'}>
+            {notifications.length} {notifications.length === 1 ? 'item' : 'items'}
+          </Badge>
+        </div>
+        <button
+          className="icon-button"
+          onClick={onClose}
+          aria-label="Close notifications"
+          title="Close notifications"
+        >
+          <X size={16} />
+        </button>
+      </div>
+
+      <div className="notif-tabs">
+        {['All', 'Alerts', 'Rewards'].map((t) => (
+          <button
+            key={t}
+            className={`notif-tab ${tab === t ? 'active' : ''}`}
+            onClick={() => setTab(t)}
+          >
+            {t}
+            {t === 'Alerts' && alertCount > 0 && <span className="tab-dot" />}
+          </button>
+        ))}
+      </div>
+
+      <div className="notif-list">
+        {filteredNotifs.length ? (
+          filteredNotifs.map((n) => (
+            <div key={n.id} className={`notif-item ${n.priority}`}>
+              <div className="notif-item-icon">
+                {n.type === 'alert' ? (
+                  <AlertTriangle size={18} />
+                ) : n.type === 'reward' ? (
+                  <Award size={18} />
+                ) : (
+                  <Package size={18} />
+                )}
+              </div>
+              <div className="notif-item-body">
+                <div className="row spread">
+                  <strong>{n.title}</strong>
+                  <span className="notif-time">{n.time}</span>
+                </div>
+                <p>{n.message}</p>
+                {n.actionLabel && (
+                  <button className="button small secondary" onClick={n.onAction}>
+                    {n.actionLabel} <ArrowRight size={13} />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="notif-empty">
+            <CheckCircle2 size={32} />
+            <p>All operational tasks are caught up!</p>
+          </div>
+        )}
+      </div>
+
+      <div className="notif-footer">
+        <button
+          className="text-button"
+          onClick={() => {
+            onClose();
+            navigate('Activity');
+          }}
+        >
+          View complete audit activity <ArrowUpRight size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function EcoRewardsCard({ rewards, navigate, targetPage = 'Impact reports' }) {
+  if (!rewards) return null;
+  return (
+    <section className="eco-card panel padded">
+      <div className="row spread">
+        <div className="row">
+          <span className="eco-tier-icon">{rewards.tierIcon}</span>
+          <div>
+            <span className="eyebrow">ANNSETU ECO-REWARDS</span>
+            <h2 className="eco-tier-title">{rewards.tier}</h2>
+          </div>
+        </div>
+        <div className="eco-total-points">
+          <strong>{number(rewards.totalPoints)}</strong>
+          <small>Green Points</small>
+        </div>
+      </div>
+
+      <div className="eco-progress-wrapper">
+        <div className="row spread">
+          <span className="small muted">
+            Level progress: <strong>{rewards.progress}%</strong>
+          </span>
+          <span className="small muted">
+            {rewards.pointsNeeded > 0
+              ? `${number(rewards.pointsNeeded)} pts to ${rewards.nextTier}`
+              : 'Max Tier Achieved'}
+          </span>
+        </div>
+        <div className="eco-progress-track">
+          <div className="eco-progress-fill" style={{ width: `${Math.max(5, rewards.progress)}%` }} />
+        </div>
+      </div>
+
+      <div className="eco-breakdown-grid">
+        <div className="eco-stat-box">
+          <span className="eco-stat-val">+{number(rewards.rescuePoints)}</span>
+          <span className="eco-stat-lbl">Food Rescued</span>
+        </div>
+        <div className="eco-stat-box">
+          <span className="eco-stat-val">+{number(rewards.carbonPoints)}</span>
+          <span className="eco-stat-lbl">Carbon Averted</span>
+        </div>
+        <div className="eco-stat-box">
+          <span className="eco-stat-val">+{number(rewards.preventionPoints)}</span>
+          <span className="eco-stat-lbl">Waste Prevented</span>
+        </div>
+      </div>
+
+      {navigate && (
+        <div className="eco-foot-action">
+          <button className="button secondary full" onClick={() => navigate(targetPage)}>
+            <span>Explore Badges & Redeem Rewards</span>
+            <ArrowRight size={15} />
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function MilestoneBadges({ badges = [] }) {
+  return (
+    <section className="panel padded spaced">
+      <div className="panel-head" style={{ padding: 0, marginBottom: '18px' }}>
+        <div>
+          <h2>Sustainability Milestones & Badges</h2>
+          <p>Earned through verified surplus recoveries and carbon reduction</p>
+        </div>
+        <Badge tone="green">VERIFIED RECORD</Badge>
+      </div>
+      <div className="badges-grid">
+        {badges.map((b) => (
+          <div key={b.id} className={`badge-card ${b.unlocked ? 'unlocked' : 'locked'}`}>
+            <div className="badge-icon-wrap">
+              <Award size={26} />
+              {b.unlocked ? (
+                <span className="badge-check" title="Milestone unlocked">
+                  <Check size={13} />
+                </span>
+              ) : (
+                <span className="badge-lock" title="In progress">
+                  🔒
+                </span>
+              )}
+            </div>
+            <strong>{b.name}</strong>
+            <p>{b.description}</p>
+            <span className={`badge-status-pill ${b.unlocked ? 'earned' : 'locked'}`}>
+              {b.unlocked ? 'Unlocked' : 'In Progress'}
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function RewardsCatalog({ rewards = [] }) {
+  return (
+    <section className="panel padded spaced">
+      <div className="panel-head" style={{ padding: 0, marginBottom: '18px' }}>
+        <div>
+          <h2>Sustainability Rewards & Partner Perks</h2>
+          <p>Redeem your AnnSetu Green Points for operational incentives</p>
+        </div>
+        <Badge tone="green">POINTS REDEEMABLE</Badge>
+      </div>
+      <div className="rewards-grid">
+        {rewards.map((r) => (
+          <div key={r.id} className={`reward-catalog-card ${r.status}`}>
+            <div className="row spread">
+              <Badge tone={r.status === 'eligible' ? 'green' : 'amber'}>{r.category}</Badge>
+              <strong className="reward-cost">{number(r.pointsCost)} pts</strong>
+            </div>
+            <h3>{r.title}</h3>
+            <p>{r.description}</p>
+            <div className="reward-action-row">
+              {r.status === 'eligible' ? (
+                <button
+                  className="button small"
+                  onClick={() => alert(`Reward "${r.title}" claimed! Your operations voucher has been logged.`)}
+                >
+                  <Sparkles size={14} /> Claim Incentive
+                </button>
+              ) : (
+                <span className="small muted">Need {r.pointsCost} Green Points to unlock</span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+

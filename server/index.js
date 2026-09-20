@@ -11,7 +11,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { User, Batch, Reading, Consumption, Plan, Saving, Audit, Need, connect } from './models.js';
-import { forecast, savingsValue, routePlan, readingAlerts, round, distance } from './domain.js';
+import { forecast, savingsValue, routePlan, readingAlerts, round, distance, calculateRewards } from './domain.js';
 const app = express();
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const secret = process.env.JWT_SECRET;
@@ -156,6 +156,50 @@ app.post('/api/auth/login', rateLimit({ windowMs: 15 * 60000, limit: 60 }), asyn
   });
   res.json(safeUser(u));
 });
+app.post('/api/auth/register', rateLimit({ windowMs: 15 * 60000, limit: 30 }), async (req, res) => {
+  const b = z
+    .object({
+      name: z.string().trim().min(2, 'Name must be at least 2 characters').max(100),
+      email: z.string().email('Invalid email address').toLowerCase(),
+      password: z.string().min(8, 'Password must be at least 8 characters').max(150),
+      org: z.string().trim().min(2, 'Organization name must be at least 2 characters').max(150),
+      role: z.enum(['kitchen', 'processor', 'ngo', 'buyer', 'logistics', 'sponsor', 'auditor']),
+      location: z
+        .object({
+          lat: z.number().min(-90).max(90),
+          lng: z.number().min(-180).max(180),
+        })
+        .optional()
+        .default({ lat: 28.6139, lng: 77.209 }),
+      capacity: z.coerce.number().positive().max(50000).optional().default(250),
+    })
+    .parse(req.body);
+
+  const existing = await User.findOne({ email: b.email });
+  if (existing) {
+    fail(409, 'An account with this email address already exists');
+  }
+
+  const hashedPassword = await bcrypt.hash(b.password, 10);
+  const u = await User.create({
+    name: b.name,
+    email: b.email,
+    password: hashedPassword,
+    org: b.org,
+    role: b.role,
+    location: b.location,
+    capacity: b.capacity,
+    active: true,
+  });
+
+  res.cookie('session', jwt.sign({ id: String(u._id) }, secret, { expiresIn: '8h' }), {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 8 * 3600000,
+  });
+  res.status(201).json(safeUser(u));
+});
 app.post('/api/auth/logout', (req, res) => {
   res.clearCookie('session');
   res.json({ ok: true });
@@ -224,41 +268,45 @@ app.get('/api/workspace', auth, async (req, res) => {
     distanceKm: round(distance(u.location, b.location)),
     expired: new Date(b.expiresAt) < new Date(),
   }));
+  const estimatedCo2Kg = round(rescuedKg * 2.5);
+  const preventedKg = round(verified.reduce((s, v) => s + v.preventedKg, 0));
+  const rewards = calculateRewards({ rescuedKg, estimatedCo2Kg, preventedKg });
   res.json({
-    user: safeUser(u),
-    batches: market,
-    readings: readings.map((r) => ({ ...r, alerts: readingAlerts(r) })),
-    history,
-    plans,
-    savings: savings.map((s) => ({ ...s, ...savingsValue(s) })),
-    needs,
-    network,
-    audits,
-    forecast: forecast(history),
-    route: routePlan(
-      batches.filter((b) => String(b.driver?._id) === String(u._id)),
-      u.location,
-    ),
-    metrics: {
-      rescuedKg,
-      mealEquivalents: Math.floor(rescuedKg / 0.4),
-      estimatedCo2Kg: round(rescuedKg * 2.5),
-      preventedKg: round(verified.reduce((s, v) => s + v.preventedKg, 0)),
-      savings: verified.reduce((s, v) => s + v.gross, 0),
-      platformFee: verified.reduce((s, v) => s + v.fee, 0),
-      saleFees: round(
-        confirmed
-          .filter((b) => b.channel === 'sale')
-          .reduce((s, b) => s + b.quantity * b.price * 0.04, 0),
+      user: safeUser(u),
+      batches: market,
+      readings: readings.map((r) => ({ ...r, alerts: readingAlerts(r) })),
+      history,
+      plans,
+      savings: savings.map((s) => ({ ...s, ...savingsValue(s) })),
+      needs,
+      network,
+      audits,
+      forecast: forecast(history),
+      route: routePlan(
+        batches.filter((b) => String(b.driver?._id) === String(u._id)),
+        u.location,
       ),
-      sponsorship: confirmed.reduce((s, b) => s + (b.sponsorship || 0), 0),
-      active: batches.filter(
-        (b) =>
-          ['available', 'reserved', 'picked_up'].includes(b.status) &&
-          new Date(b.expiresAt) > new Date(),
-      ).length,
-      alerts: alerts.length,
-    },
+      metrics: {
+        rescuedKg,
+        mealEquivalents: Math.floor(rescuedKg / 0.4),
+        estimatedCo2Kg,
+        preventedKg,
+        rewards,
+        savings: verified.reduce((s, v) => s + v.gross, 0),
+        platformFee: verified.reduce((s, v) => s + v.fee, 0),
+        saleFees: round(
+          confirmed
+            .filter((b) => b.channel === 'sale')
+            .reduce((s, b) => s + b.quantity * b.price * 0.04, 0),
+        ),
+        sponsorship: confirmed.reduce((s, b) => s + (b.sponsorship || 0), 0),
+        active: batches.filter(
+          (b) =>
+            ['available', 'reserved', 'picked_up'].includes(b.status) &&
+            new Date(b.expiresAt) > new Date(),
+        ).length,
+        alerts: alerts.length,
+      },
     ai: {
       configured: !!process.env.SARVAM_API_KEY,
       provider: 'Sarvam',
