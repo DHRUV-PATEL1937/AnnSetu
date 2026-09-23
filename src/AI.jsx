@@ -207,7 +207,15 @@ export function ImageInspection() {
           {error}
         </p>
       )}
-      {answer && <div className="assessment">{answer}</div>}
+      {answer && (
+        <div className="assessment" role="status">
+          <div className="assessment-head">
+            <Badge tone="green">Visual review complete</Badge>
+            <span>Advisory result · human release still required</span>
+          </div>
+          <p>{answer}</p>
+        </div>
+      )}
     </section>
   );
 }

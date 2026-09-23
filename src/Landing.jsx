@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Leaf,
   ArrowRight,
@@ -43,7 +43,7 @@ const steps = [
   {
     num: '02',
     title: 'Quality Assessment & Safety Release',
-    tag: 'FSSAI & Cold Chain',
+    tag: 'Human Safety Release',
     desc: 'Every surplus batch is inspected for storage conditions, shelf-life, and allergens. Automated IoT sensor tracking alerts if chilled storage warms beyond safety thresholds.',
     icon: Thermometer,
     details: [
@@ -60,7 +60,7 @@ const steps = [
     icon: HeartHandshake,
     details: [
       'Strict zero-fee policy on all food donations',
-      'Instant push notifications to nearby verified shelters',
+      'In-app alerts surface suitable surplus to nearby shelters',
       'Secondary market channel for commercial surplus repurposing',
     ],
   },
@@ -79,25 +79,25 @@ const steps = [
   {
     num: '05',
     title: 'Recipient Confirmation & Delivery Proof',
-    tag: 'Zero-Fraud Verification',
+    tag: 'Receiving Confirmation',
     desc: 'The receiving NGO confirms batch quantity, temperature on arrival, and recipient count in the system. Eliminates phantom donations and double-counting.',
     icon: CheckCircle2,
     details: [
-      'Immutable recipient sign-off on receipt',
-      'Photo receipt proof and meal distribution logs',
+      'Server-recorded recipient sign-off on receipt',
+      'Handover evidence notes and delivery status history',
       'Separation of prevention metrics from redistribution counts',
     ],
   },
   {
     num: '06',
     title: 'Audited ESG Dividends & EcoRewards',
-    tag: 'Measurable ESG & Points',
+    tag: 'Evidence-Ready Impact',
     desc: 'Independent auditors verify claimed prevention savings. Organizations earn EcoPoints, unlock Gold/Platinum badges, and generate verifiable CSR sustainability reports.',
     icon: Award,
     details: [
       'Independent auditor monthly verification gate',
       'EcoPoints rewards catalog and recognition tiers',
-      'Automated CSV & audit exports for CSR / ESG compliance',
+      'CSV evidence exports for internal CSR and ESG review',
     ],
   },
 ];
@@ -186,6 +186,13 @@ export default function Landing({
 }) {
   const [activeRole, setActiveRole] = useState(ecosystemRoles[0]);
   const [activeStep, setActiveStep] = useState(0);
+  const [publicImpact, setPublicImpact] = useState(null);
+
+  useEffect(() => {
+    api('/public/impact')
+      .then(setPublicImpact)
+      .catch(() => setPublicImpact(null));
+  }, []);
 
   return (
     <div className="landing-page">
@@ -254,22 +261,27 @@ export default function Landing({
 
         <div className="hero-stats-strip">
           <div className="hero-stat-cell">
-            <span className="hero-stat-val">0%</span>
-            <span className="hero-stat-lbl">NGO Platform Commission</span>
+            <span className="hero-stat-val">
+              {publicImpact ? `${publicImpact.recoveredKg} kg` : '—'}
+            </span>
+            <span className="hero-stat-lbl">Recipient-confirmed recovery</span>
           </div>
           <div className="hero-stat-cell">
-            <span className="hero-stat-val">8 Roles</span>
-            <span className="hero-stat-lbl">Connected Stakeholders</span>
+            <span className="hero-stat-val">{publicImpact?.mealEquivalents ?? '—'}</span>
+            <span className="hero-stat-lbl">Estimated meal equivalents</span>
           </div>
           <div className="hero-stat-cell">
-            <span className="hero-stat-val">100%</span>
-            <span className="hero-stat-lbl">Audited Recipient Delivery</span>
+            <span className="hero-stat-val">{publicImpact?.deliveries ?? '—'}</span>
+            <span className="hero-stat-lbl">Confirmed handovers</span>
           </div>
           <div className="hero-stat-cell">
-            <span className="hero-stat-val">Sarvam AI</span>
-            <span className="hero-stat-lbl">Multilingual Food Copilot</span>
+            <span className="hero-stat-val">{publicImpact?.activeOrganizations ?? '—'}</span>
+            <span className="hero-stat-lbl">Active demo organizations</span>
           </div>
         </div>
+        <p className="hero-metric-note">
+          Live demonstration records · meal equivalents use 0.4 kg per meal
+        </p>
       </section>
 
       {/* Quick Demo Launcher Card */}

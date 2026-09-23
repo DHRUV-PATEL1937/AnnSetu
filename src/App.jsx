@@ -211,9 +211,26 @@ export default function App() {
     { batchForm, reviewBatch, claim, transition } = actions;
   if (checking)
     return (
-      <div className="loading">
-        <Brand />
-        <LoaderCircle className="spin" />
+      <div className="app-loading" aria-label="Loading AnnSetu workspace" aria-live="polite">
+        <aside className="loading-sidebar">
+          <Brand small />
+          <span className="skeleton sk-profile" />
+          {Array.from({ length: 6 }, (_, index) => (
+            <span className="skeleton sk-nav" key={index} />
+          ))}
+        </aside>
+        <main className="loading-main">
+          <span className="skeleton sk-title" />
+          <div className="loading-stats">
+            {Array.from({ length: 4 }, (_, index) => (
+              <span className="skeleton sk-stat" key={index} />
+            ))}
+          </div>
+          <span className="skeleton sk-chart" />
+          <p>
+            <LoaderCircle className="spin" size={18} /> Loading your operational records…
+          </p>
+        </main>
       </div>
     );
   if (!user) {
@@ -708,6 +725,3 @@ export default function App() {
     </div>
   );
 }
-
-
-

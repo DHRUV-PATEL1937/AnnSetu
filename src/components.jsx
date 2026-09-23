@@ -112,6 +112,16 @@ export function Stat({ label, value, detail, Icon = Leaf, tone = '' }) {
 }
 export function Modal({ modal, onClose, onSubmit, busy, error }) {
   const first = useRef(null);
+  const [step, setStep] = useState(0);
+  const [draft, setDraft] = useState({});
+  const pageSize = 4;
+  const totalSteps = Math.ceil(modal.fields.length / pageSize);
+  const visibleFields = modal.fields.slice(step * pageSize, (step + 1) * pageSize);
+  const remember = (form) => {
+    const next = { ...draft, ...Object.fromEntries(new FormData(form)) };
+    setDraft(next);
+    return next;
+  };
   useEffect(() => {
     const previous = document.activeElement;
     first.current?.focus();
@@ -167,17 +177,31 @@ export function Modal({ modal, onClose, onSubmit, busy, error }) {
           </button>
         </div>
         {modal.description && <p className="muted">{modal.description}</p>}
+        {totalSteps > 1 && (
+          <div className="form-progress" aria-label={`Step ${step + 1} of ${totalSteps}`}>
+            <span>
+              Step {step + 1} of {totalSteps}
+            </span>
+            <div>
+              {Array.from({ length: totalSteps }, (_, index) => (
+                <i key={index} className={index <= step ? 'active' : ''} />
+              ))}
+            </div>
+          </div>
+        )}
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            onSubmit(Object.fromEntries(new FormData(e.currentTarget)));
+            const values = remember(e.currentTarget);
+            if (step < totalSteps - 1) setStep((current) => current + 1);
+            else onSubmit(values);
           }}
         >
           <div className="form-grid">
-            {modal.fields.map((f) => (
+            {visibleFields.map((f) => (
               <Field key={f.name} label={f.label}>
                 {f.options ? (
-                  <select name={f.name} defaultValue={f.value} required>
+                  <select name={f.name} defaultValue={draft[f.name] ?? f.value} required>
                     {f.options.map((o) => (
                       <option key={o.value ?? o} value={o.value ?? o}>
                         {o.label ?? o}
@@ -187,7 +211,7 @@ export function Modal({ modal, onClose, onSubmit, busy, error }) {
                 ) : f.type === 'textarea' ? (
                   <textarea
                     name={f.name}
-                    defaultValue={f.value}
+                    defaultValue={draft[f.name] ?? f.value}
                     required={f.required !== false}
                     minLength={f.minLength}
                     maxLength={f.maxLength || 2000}
@@ -198,7 +222,7 @@ export function Modal({ modal, onClose, onSubmit, busy, error }) {
                   <input
                     name={f.name}
                     type={f.type || 'text'}
-                    defaultValue={f.value}
+                    defaultValue={draft[f.name] ?? f.value}
                     min={f.min}
                     max={f.max}
                     minLength={f.minLength}
@@ -216,12 +240,23 @@ export function Modal({ modal, onClose, onSubmit, busy, error }) {
             </p>
           )}
           <div className="modal-actions">
-            <button type="button" className="button secondary" onClick={onClose} disabled={busy}>
-              Cancel
+            <button
+              type="button"
+              className="button secondary"
+              onClick={(event) => {
+                if (step === 0) onClose();
+                else {
+                  remember(event.currentTarget.form);
+                  setStep((current) => current - 1);
+                }
+              }}
+              disabled={busy}
+            >
+              {step === 0 ? 'Cancel' : 'Back'}
             </button>
             <button className="button" disabled={busy}>
               {busy ? <LoaderCircle className="spin" size={17} /> : <Check size={17} />}{' '}
-              {modal.submit || 'Save record'}
+              {step < totalSteps - 1 ? 'Continue' : modal.submit || 'Save record'}
             </button>
           </div>
         </form>
